@@ -1,8 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "esnext"
-    ],
+    "lib": ["esnext"],
     "experimentalDecorators": true,
     "strict": true
   }

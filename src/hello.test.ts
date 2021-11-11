@@ -1,4 +1,4 @@
-import {greeter} from "./hello";
+import { greeter } from "./hello";
 
 describe(greeter.name, () => {
   it("should return greeting", () => {
