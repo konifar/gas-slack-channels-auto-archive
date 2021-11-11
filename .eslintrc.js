@@ -11,9 +11,7 @@ module.exports = {
     // https://prettier.io/docs/en/integrating-with-linters.html
     "prettier",
   ],
-  plugins: [
-    "@typescript-eslint"
-  ],
+  plugins: ["@typescript-eslint"],
   parser: "@typescript-eslint/parser",
   parserOptions: {
     project: "./tsconfig.json",
@@ -24,11 +22,19 @@ module.exports = {
     "import/no-cycle": "error",
     "import/no-default-export": "warn",
 
-    "@typescript-eslint/array-type": ["warn", {default: "generic"}],
+    "@typescript-eslint/array-type": ["warn", { default: "generic" }],
     "@typescript-eslint/naming-convention": [
       "warn",
-      {"selector": "default", "format": ["camelCase", "UPPER_CASE", "PascalCase"], "leadingUnderscore": "allow"},
-      {"selector": "typeLike", "format": ["PascalCase"], "leadingUnderscore": "allow"},
+      {
+        selector: "default",
+        format: ["camelCase", "UPPER_CASE", "PascalCase"],
+        leadingUnderscore: "allow",
+      },
+      {
+        selector: "typeLike",
+        format: ["PascalCase"],
+        leadingUnderscore: "allow",
+      },
     ],
     "@typescript-eslint/explicit-module-boundary-types": "off",
 
@@ -38,5 +44,9 @@ module.exports = {
     "@typescript-eslint/no-var-requires": "off",
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { varsIgnorePattern: "execute" },
+    ],
   },
 };
