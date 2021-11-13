@@ -63,12 +63,13 @@ function createSheetRow(
   lastMessageText: string,
   lastMessageTs: number
 ): SheetRow {
-  const ellapsedDays = Math.floor(
+  const elapsedDays = Math.floor(
     (new Date().getTime() - new Date(lastTs * 1000).getTime()) /
       (1000 * 60 * 60 * 24)
   );
   const lastMessageDate =
     lastMessageTs > 0 ? formatDateYYYYMMddHHmmss(lastMessageTs) : "";
+  const wl = isWhitelist(channel);
   return new SheetRow(
     channel.name,
     channel.id,
@@ -78,7 +79,8 @@ function createSheetRow(
     lastUserName,
     lastMessageText,
     lastMessageDate,
-    ellapsedDays
+    elapsedDays,
+    wl
   );
 }
 
@@ -91,7 +93,8 @@ class SheetRow {
   lastUserName: string;
   lastMessageText: string;
   lastMessageDate: string;
-  ellapsedDays: number;
+  elapsedDays: number;
+  isWhitelist: boolean;
 
   constructor(
     channelName: string,
@@ -102,7 +105,8 @@ class SheetRow {
     lastUserName: string,
     lastMessageText: string,
     lastMessageDate: string,
-    ellapsedDays: number
+    elapsedDays: number,
+    isWhitelist: boolean
   ) {
     this.channelName = channelName;
     this.channelID = channelID;
@@ -112,7 +116,8 @@ class SheetRow {
     this.lastUserName = lastUserName;
     this.lastMessageText = lastMessageText;
     this.lastMessageDate = lastMessageDate;
-    this.ellapsedDays = ellapsedDays;
+    this.elapsedDays = elapsedDays;
+    this.isWhitelist = isWhitelist;
   }
 
   toArray(): Array<any> {
@@ -125,7 +130,8 @@ class SheetRow {
       this.lastUserName,
       this.lastMessageText,
       this.lastMessageDate,
-      this.ellapsedDays,
+      this.elapsedDays,
+      this.isWhitelist,
     ];
   }
 }
@@ -188,7 +194,7 @@ function writeDataToSpreadSheet(rowData: Array<any>) {
   }
 
   // Clear data
-  sheet.getRange("A2:I1000").clearContent();
+  sheet.getRange("A2:I3000").clearContent();
 
   const rows = rowData.length;
   const cols = rowData[0].length;
@@ -231,4 +237,8 @@ function formatDateYYYYMMddHHmmss(timestamp: number): string {
     "Asia/Tokyo",
     "yyyy/MM/dd HH:mm:ss"
   );
+}
+
+function isWhitelist(channel: any): boolean {
+  return channel.purpose.includes(":keep:") || channel.name.includes("alert");
 }
