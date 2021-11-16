@@ -160,8 +160,8 @@ function writeAllPublicChannelsToSpreadSheet(rowData: Array<AllPublicChannelsShe
   range.setValues(rowArrays);
   // Order by elapsed date desc
   range.sort([
-    {column: 9, ascending: false},
-    {column: 1, ascending: true},
+    { column: 9, ascending: false },
+    { column: 1, ascending: true },
   ]);
   sheet.setRowHeights(2, rows - 1, 21);
 }
@@ -254,8 +254,8 @@ function writeArchiveWarningChannelsToSpreadSheet(rowData: Array<ArchiveWarningC
   range.setValues(rowArrays);
   // Order by listed date and elapsed date desc
   range.sort([
-    {column: 7, ascending: false},
-    {column: 1, ascending: true},
+    { column: 7, ascending: false },
+    { column: 1, ascending: true },
   ]);
   sheet.setRowHeights(2, rows - 1, 21);
 }
@@ -336,7 +336,7 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
 
   message += `*:hourglass_flowing_sand: 次のチャネルは${WARNING_DAYS_COUNT}日以上コメントがないため、自動アーカイブの候補になっています*\n`;
   message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
-  message += `${sheetUrl}\n\n`
+  message += `${sheetUrl}\n\n`;
   for (const row of filteredArchiveWarningRows) {
     const remainingDays = GRACE_DAYS_COUNT - row.daysFromListed;
     if (remainingDays > 0) {
@@ -430,9 +430,9 @@ function postSlackBotMessage(channelId: string, text: string): boolean {
     token: SLACK_BOT_TOKEN,
     channel: channelId,
     text: text,
-    icon_emoji: SLACK_BOT_ICON_EMOJI,
+    icon_emoji: SLACK_BOT_ICON_EMOJI, // eslint-disable-line @typescript-eslint/naming-convention
     username: SLACK_BOT_NAME,
-    link_names: true,
+    link_names: true, // eslint-disable-line @typescript-eslint/naming-convention
   };
   const headers = {
     Authorization: `Bearer ${SLACK_TOKEN}`,
