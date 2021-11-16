@@ -1,94 +1,86 @@
+import Sheet = GoogleAppsScript.Spreadsheet.Sheet;
+
 const SLACK_API_URL = "https://slack.com/api";
 
-const SLACK_TOKEN =
-  PropertiesService.getScriptProperties().getProperty("SLACK_TOKEN");
-const SPREAD_SHEET_ID =
-  PropertiesService.getScriptProperties().getProperty("SPREAD_SHEET_ID");
+const SLACK_TOKEN = PropertiesService.getScriptProperties().getProperty("SLACK_TOKEN");
+// アーカイブを行うSlack BotのToken
+const SLACK_BOT_TOKEN = PropertiesService.getScriptProperties().getProperty("SLACK_BOT_TOKEN");
+// アーカイブを行うSlack Botをチャネルに招待する時に使うユーザーID
+const SLACK_BOT_USER_ID = PropertiesService.getScriptProperties().getProperty("SLACK_BOT_USER_ID");
+// 結果をコメントするSlack Botの表示名
+const SLACK_BOT_NAME = PropertiesService.getScriptProperties().getProperty("SLACK_BOT_NAME");
+// 結果をコメントするSlack Botのアイコンemoji
+const SLACK_BOT_ICON_EMOJI = PropertiesService.getScriptProperties().getProperty("SLACK_BOT_ICON_EMOJI");
 
-const SHEET_NAME_LIST = "list";
-const SHEET_NAME_PRE_ARCHIVE_LIST = "pre_ archive_list";
+const ANNOUNCE_SLACK_CHANNEL_ID = PropertiesService.getScriptProperties().getProperty("ANNOUNCE_SLACK_CHANNEL_ID");
 
+const SPREAD_SHEET_ID = PropertiesService.getScriptProperties().getProperty("SPREAD_SHEET_ID");
+const SHEET_NAME_PUBLIC_CHANNELS = "public_channels";
+const SHEET_NAME_ARCHIVE_WARNING_CHANNELS = "archive_warning_channels";
+
+// アーカイブ警告を行う閾値の日数
 const WARNING_DAYS_COUNT = 90;
+// アーカイブを行うまでの最大警告日数
+const GRACE_DAYS_COUNT = 10;
 
 function execute() {
-  const channels = getPublicChannels();
-  Logger.log(`Number of all channels: ${channels.length}`);
+  const channels = fetchPublicChannels();
+  Logger.log(`Publicチャネル数: ${channels.length}`);
 
-  const users = getAllUsers();
-  Logger.log(`Number of all users: ${users.size}`);
+  const usersMap = fetchAllUserIdNameMap();
+  Logger.log(`ユーザー数: ${usersMap.size}`);
 
-  const sheetRowData: Array<AllListSheetRow> = []; // Array to output to SpreadSheet
-
+  const allChannelsRowList: Array<AllPublicChannelsSheetRow> = [];
   for (const channel of channels) {
     if (!channel.is_channel) {
       continue;
     }
-
-    const latestMessage = getLatestChannelMessage(channel.id);
-    const creatorName = users.get(channel.creator);
-
-    Logger.log(`  - Channel:#${channel.name}, Creator:@${creatorName}`);
-
-    if (latestMessage != null) {
-      // Calculate days diff from the last message date to the current date
-      const row = createSheetRow(
-        channel,
-        creatorName,
-        users.get(latestMessage.user),
-        latestMessage.ts,
-        latestMessage.text,
-        latestMessage.ts
-      );
-      sheetRowData.push(row);
-    } else {
-      // Calculate days diff from the channel created date to the current date
-      const row = createSheetRow(
-        channel,
-        creatorName,
-        "",
-        channel.created,
-        "",
-        0
-      );
-      sheetRowData.push(row);
-    }
+    const latestMessage = fetchLatestChannelMessage(channel.id);
+    const row = createAllPublicChannelsSheetRow(channel, usersMap, latestMessage);
+    const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
+    Logger.log(`  [#${row.channelName}] 作成者: ${creatorName}`);
+    allChannelsRowList.push(row);
   }
 
-  writeAllListToSpreadSheet(sheetRowData);
-  Logger.log(`Write all list to SpreadSheet: ${sheetRowData.length}`);
+  if (allChannelsRowList.length == 0) {
+    Logger.log("Publicチャネルがありません");
+    return;
+  }
 
-  const preArchiveMap = readPreArchiveMapFromSpreadSheet();
-  Logger.log(`Get previous pre archive list: ${preArchiveMap.size}`);
+  writeAllPublicChannelsToSpreadSheet(allChannelsRowList);
 
-  const preArchiveRowData = createPreArchiveSheetRows(
-    sheetRowData,
-    preArchiveMap
-  );
-  whitePreArchiveListToSpreadSheet(preArchiveRowData);
-  Logger.log(
-    `Write pre archive list to SpreadSheet: ${preArchiveRowData.length}`
-  );
+  const archiveWarningChannelsMap = readArchiveWarningChannelsMapFromSpreadSheet();
+  Logger.log(`現在のアーカイブ警告チャネル数: ${archiveWarningChannelsMap.size}`);
+
+  const archiveWarningRows = createArchiveWarningChannelSheetRows(allChannelsRowList, archiveWarningChannelsMap);
+  writeArchiveWarningChannelsToSpreadSheet(archiveWarningRows);
+  Logger.log(`アーカイブ警告チャネルをSpreadSheetに書き込み: ${archiveWarningRows.length}`);
+
+  const archivedRows = archiveChannels(archiveWarningRows);
+  Logger.log(`アーカイブしたチャネル数: ${archivedRows.length}`);
+
+  const slackMessage = createSlackMessage(archivedRows, archiveWarningRows);
+  Logger.log(slackMessage);
+
+  if (ANNOUNCE_SLACK_CHANNEL_ID != null) {
+    postSlackBotMessage(ANNOUNCE_SLACK_CHANNEL_ID, slackMessage);
+  }
 }
 
 /**
- * @return SpreadSheet row data array
+ * @return Publicチャネル一覧のSpreadSheetのRow
  */
-function createSheetRow(
-  channel: any,
-  creatorName: any,
-  lastUserName: any,
-  lastTs: number,
-  lastMessageText: string,
-  lastMessageTs: number
-): AllListSheetRow {
-  const elapsedDays = Math.floor(
-    (new Date().getTime() - new Date(lastTs * 1000).getTime()) /
-      (1000 * 60 * 60 * 24)
-  );
-  const lastMessageDate =
-    lastMessageTs > 0 ? formatDateYYYYMMddHHmmss(lastMessageTs) : "";
-  const wl = isWhitelisted(channel);
-  return new AllListSheetRow(
+function createAllPublicChannelsSheetRow(channel: any, usersMap: any, latestMessage: any): AllPublicChannelsSheetRow {
+  const creatorName = usersMap.get(channel.creator) != undefined ? usersMap.get(channel.creator) : "";
+  const lastTs = latestMessage != null ? latestMessage.ts : channel.created;
+  const lastUserName = latestMessage != null ? (usersMap.get(latestMessage.user) != undefined ? usersMap.get(latestMessage.user) : "") : "";
+  const lastMessageText = latestMessage != null ? latestMessage.text : "";
+  const lastMessageTs = latestMessage != null ? latestMessage.ts : 0;
+
+  const lastMessageDate = lastMessageTs > 0 ? formatDateYYYYMMddHHmmss(lastMessageTs) : "";
+  const elapsedDays = Math.floor((new Date().getTime() - new Date(lastTs * 1000).getTime()) / (1000 * 60 * 60 * 24));
+
+  return new AllPublicChannelsSheetRow(
     channel.name,
     channel.id,
     creatorName,
@@ -98,18 +90,23 @@ function createSheetRow(
     lastMessageText,
     lastMessageDate,
     elapsedDays,
-    wl
+    isWhitelisted()
   );
+
+  function isWhitelisted(): boolean {
+    return channel.purpose.value.includes(":keep:") || channel.name.includes("alert");
+  }
 }
 
 /**
- * @return Array of all public channels
+ * @return Publicチャネル一覧
  */
-function getPublicChannels(): Array<any> {
+function fetchPublicChannels(): Array<any> {
   let channels: Array<any> = [];
   let nextCursor = "";
 
   do {
+    // https://api.slack.com/methods/conversations.list
     let url = `${SLACK_API_URL}/conversations.list?token=${SLACK_TOKEN}&exclude_archived=true&types=public_channel&limit=999`;
     if (nextCursor != "") {
       url += `&cursor=${nextCursor}`;
@@ -123,13 +120,14 @@ function getPublicChannels(): Array<any> {
 }
 
 /**
- * @return Map of user id and user name
+ * @return ユーザーIDとユーザー名のMap
  */
-function getAllUsers(): Map<string, string> {
+function fetchAllUserIdNameMap(): Map<string, string> {
   const usersMap = new Map<string, string>();
   let nextCursor = "";
 
   do {
+    // https://api.slack.com/methods/users.list
     let url = `${SLACK_API_URL}/users.list?token=${SLACK_TOKEN}&limit=999`;
     if (nextCursor != "") {
       url += `&cursor=${nextCursor}`;
@@ -144,24 +142,12 @@ function getAllUsers(): Map<string, string> {
   return usersMap;
 }
 
-function writeAllListToSpreadSheet(rowData: Array<AllListSheetRow>) {
-  if (SPREAD_SHEET_ID == null) {
-    return;
-  }
+/**
+ * Publicチャネル一覧をシートに書き込み
+ */
+function writeAllPublicChannelsToSpreadSheet(rowData: Array<AllPublicChannelsSheetRow>) {
+  const sheet = getSheet(SHEET_NAME_PUBLIC_CHANNELS);
 
-  const sheet =
-    SpreadsheetApp.openById(SPREAD_SHEET_ID).getSheetByName(SHEET_NAME_LIST);
-  if (sheet == null) {
-    Logger.log(`SpreadSheet is not found: ${SPREAD_SHEET_ID}`);
-    return;
-  }
-
-  if (rowData.length == 0) {
-    Logger.log("Data is empty");
-    return;
-  }
-
-  // Clear data
   sheet.getRange("A2:I3000").clearContent();
 
   const rowArrays = rowData.map(function (row) {
@@ -181,21 +167,10 @@ function writeAllListToSpreadSheet(rowData: Array<AllListSheetRow>) {
 }
 
 /**
- * @return Map of pairs of channel_id and created_at
+ * @return 現在のチャネルIDと追加日のMap
  */
-function readPreArchiveMapFromSpreadSheet(): Map<string, Date> {
-  if (SPREAD_SHEET_ID == null) {
-    Logger.log(`SpreadSheet is not found: ${SPREAD_SHEET_ID}`);
-    return new Map();
-  }
-
-  const sheet = SpreadsheetApp.openById(SPREAD_SHEET_ID).getSheetByName(
-    SHEET_NAME_PRE_ARCHIVE_LIST
-  );
-  if (sheet == null) {
-    Logger.log(`Sheet is not found: ${SHEET_NAME_PRE_ARCHIVE_LIST}`);
-    return new Map();
-  }
+function readArchiveWarningChannelsMapFromSpreadSheet(): Map<string, Date> {
+  const sheet = getSheet(SHEET_NAME_ARCHIVE_WARNING_CHANNELS);
 
   const values = sheet.getDataRange().getValues();
 
@@ -214,32 +189,25 @@ function readPreArchiveMapFromSpreadSheet(): Map<string, Date> {
 }
 
 /**
- * @return Current data rows to be listed to pre-archive
+ * @return アーカイブ警告チャネル一覧
  */
-function createPreArchiveSheetRows(
-  rowData: Array<AllListSheetRow>,
-  currentPreArchiveMap: Map<string, Date>
-): Array<PreArchiveListSheetRow> {
-  if (rowData.length == 0) {
-    Logger.log("Data is empty");
-    return [];
-  }
-
+function createArchiveWarningChannelSheetRows(
+  allChannelsRows: Array<AllPublicChannelsSheetRow>,
+  currentArchiveWarningChannelIdDateMap: Map<string, Date>
+): Array<ArchiveWarningChannelsSheetRow> {
   const result = [];
 
-  for (const row of rowData) {
+  for (const row of allChannelsRows) {
     if (row.elapsedDays >= WARNING_DAYS_COUNT && !row.isWhitelist) {
-      let listedAt = currentPreArchiveMap.get(row.channelID);
-      if (listedAt == null) {
+      let listedAt = currentArchiveWarningChannelIdDateMap.get(row.channelID);
+      if (listedAt == null || listedAt == undefined) {
         listedAt = new Date();
       }
 
-      const daysFromListed = Math.floor(
-        (new Date().getTime() - listedAt.getTime()) / (1000 * 60 * 60 * 24)
-      );
+      const daysFromListed = Math.floor((new Date().getTime() - listedAt.getTime()) / (1000 * 60 * 60 * 24));
 
       result.push(
-        new PreArchiveListSheetRow(
+        new ArchiveWarningChannelsSheetRow(
           row.channelName,
           row.channelID,
           row.creatorName,
@@ -255,26 +223,26 @@ function createPreArchiveSheetRows(
   return result;
 }
 
-function whitePreArchiveListToSpreadSheet(
-  rowData: Array<PreArchiveListSheetRow>
-) {
+/**
+ * @return 引数のシート名のSheet
+ */
+function getSheet(sheetName: string): Sheet {
   if (SPREAD_SHEET_ID == null) {
-    return;
+    throw new Error(`SpreadSheet is not found: ${SPREAD_SHEET_ID}`);
   }
-
-  const sheet = SpreadsheetApp.openById(SPREAD_SHEET_ID).getSheetByName(
-    SHEET_NAME_PRE_ARCHIVE_LIST
-  );
+  const sheet = SpreadsheetApp.openById(SPREAD_SHEET_ID).getSheetByName(sheetName);
   if (sheet == null) {
-    return;
+    throw new Error(`Sheet is not found: ${sheetName}`);
   }
+  return sheet;
+}
 
-  if (rowData.length == 0) {
-    Logger.log("Data is empty");
-    return;
-  }
+/**
+ * アーカイブ警告チャネル一覧の書き込み
+ */
+function writeArchiveWarningChannelsToSpreadSheet(rowData: Array<ArchiveWarningChannelsSheetRow>) {
+  const sheet = getSheet(SHEET_NAME_ARCHIVE_WARNING_CHANNELS);
 
-  // Clear data
   sheet.getRange("A2:I3000").clearContent();
 
   const rowArrays = rowData.map(function (row) {
@@ -286,26 +254,113 @@ function whitePreArchiveListToSpreadSheet(
   range.setValues(rowArrays);
   // Order by listed date and elapsed date desc
   range.sort([
-    { column: 6, ascending: false },
-    { column: 4, ascending: false },
+    { column: 7, ascending: false },
+    { column: 1, ascending: true },
   ]);
   sheet.setRowHeights(2, rows - 1, 21);
 }
 
 /**
- * @return Latest message of the last 200 messages
+ * 警告から${GRACE_DAYS_COUNT}日以上経ったチャネルをアーカイブ
+ * @return アーカイブしたチャネル行リスト
  */
-function getLatestChannelMessage(channelId: string) {
+function archiveChannels(rowData: Array<ArchiveWarningChannelsSheetRow>): Array<ArchiveWarningChannelsSheetRow> {
+  const archiveTargets = rowData.filter(function (row) {
+    return row.daysFromListed >= GRACE_DAYS_COUNT;
+  });
+
+  const result = [];
+  for (const target of archiveTargets) {
+    // チャネルに参加していないとアーカイブできないので招待しておく
+    const invited = inviteBotToChannel(target.channelID);
+    Logger.log(`  [${target.channelName}] invited: ${invited}`);
+    const archived = archiveChannel(target.channelID);
+    Logger.log(`  [${target.channelName}] archived: ${archived}`);
+    if (archived) {
+      result.push(target);
+    }
+  }
+  return result;
+}
+
+/**
+ * @return Slackに通知するメッセージ
+ */
+function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>, archiveWarningRows: Array<ArchiveWarningChannelsSheetRow>): string {
+  const filteredArchiveWarningRows = archiveWarningRows
+    .sort(function (a, b) {
+      if (a.daysFromListed > b.daysFromListed) {
+        return -1;
+      } else if (a.daysFromListed < b.daysFromListed) {
+        return 1;
+      } else {
+        if (a.channelName < b.channelName) {
+          return -1;
+        } else if (a.channelName > b.channelName) {
+          return 1;
+        } else {
+          return 0;
+        }
+      }
+    })
+    .filter(function (row) {
+      return !archivedRows.includes(row);
+    });
+
+  const sortedArchivedRows = archivedRows.sort(function (a, b) {
+    if (a.channelName < b.channelName) {
+      return -1;
+    } else if (a.channelName > b.channelName) {
+      return 1;
+    } else {
+      return 0;
+    }
+  });
+
+  const sheet = getSheet(SHEET_NAME_ARCHIVE_WARNING_CHANNELS);
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/${SPREAD_SHEET_ID}/edit#gid=${sheet.getSheetId()}`;
+
+  let message = "";
+  if (sortedArchivedRows.length > 0) {
+    message += `*:wave: 次のチャネルは警告から${GRACE_DAYS_COUNT}日以上コメントがなかったため、アーカイブされました*\n\n`;
+    for (const row of sortedArchivedRows) {
+      const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
+      const lastUserName = row.lastUserName != "" ? `@${row.lastUserName}` : "不明";
+      message += `#${row.channelName} by ${creatorName} | 最終コメント: ${lastUserName}\n`;
+    }
+  } else {
+    message += `*:white_check_mark: アーカイブされたチャネルはありません*`;
+  }
+
+  message += "\n\n\n";
+
+  message += `*:hourglass_flowing_sand: 次のチャネルは${WARNING_DAYS_COUNT}日以上コメントがないため、自動アーカイブの候補になっています*\n`;
+  message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
+  message += `${sheetUrl}\n\n`;
+  for (const row of filteredArchiveWarningRows) {
+    const remainingDays = GRACE_DAYS_COUNT - row.daysFromListed;
+    if (remainingDays > 0) {
+      const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
+      const lastUserName = row.lastUserName != "" ? `@${row.lastUserName}` : "不明";
+      message += `\`あと ${remainingDays} 日\` #${row.channelName} by ${creatorName} | 最終コメント: ${lastUserName}\n`;
+    }
+  }
+
+  return message;
+}
+
+/**
+ * 直近200件の中で最新のチャネルメッセージを取得
+ * @return 最新のメッセージ
+ */
+function fetchLatestChannelMessage(channelId: string): any {
+  // https://api.slack.com/methods/conversations.history
   const url = `${SLACK_API_URL}/conversations.history?token=${SLACK_TOKEN}&channel=${channelId}&limit=200`;
   const json = JSON.parse(UrlFetchApp.fetch(url).getContentText());
 
   for (const message of json.messages) {
     // https://api.slack.com/events/message#subtypes
-    if (
-      message.type == "message" &&
-      message.subtype != "channel_leave" &&
-      message.subtype != "channel_join"
-    ) {
+    if (message.type == "message" && message.subtype != "channel_leave" && message.subtype != "channel_join") {
       return message;
     }
   }
@@ -313,23 +368,96 @@ function getLatestChannelMessage(channelId: string) {
 }
 
 /**
- * @return Formatted date string
+ * 引数のチャネルをアーカイブ
+ * @return 成功したらtrue
+ */
+function archiveChannel(channelId: string): boolean {
+  // https://api.slack.com/methods/conversations.archive
+  const url = `${SLACK_API_URL}/conversations.archive`;
+  const body = {
+    token: SLACK_BOT_TOKEN,
+    channel: channelId,
+  };
+  const headers = {
+    Authorization: `Bearer ${SLACK_TOKEN}`,
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(body),
+    headers: headers,
+    muteHttpExceptions: true,
+  });
+
+  const json = JSON.parse(res.getContentText());
+  return json.ok;
+}
+
+/**
+ * 引数のチャネルにBotユーザーを招待
+ * @return 成功したらtrue
+ */
+function inviteBotToChannel(channelId: string): boolean {
+  // https://api.slack.com/methods/conversations.invite
+  const url = `${SLACK_API_URL}/conversations.invite`;
+  const body = {
+    token: SLACK_TOKEN,
+    channel: channelId,
+    users: SLACK_BOT_USER_ID,
+  };
+  const headers = {
+    Authorization: `Bearer ${SLACK_TOKEN}`,
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(body),
+    headers: headers,
+    muteHttpExceptions: true,
+  });
+
+  const json = JSON.parse(res.getContentText());
+  return json.ok;
+}
+
+/**
+ * Slackにコメント
+ */
+function postSlackBotMessage(channelId: string, text: string): boolean {
+  // https://api.slack.com/methods/chat.postMessage
+  const url = `${SLACK_API_URL}/chat.postMessage`;
+  const body = {
+    token: SLACK_BOT_TOKEN,
+    channel: channelId,
+    text: text,
+    icon_emoji: SLACK_BOT_ICON_EMOJI, // eslint-disable-line @typescript-eslint/naming-convention
+    username: SLACK_BOT_NAME,
+    link_names: true, // eslint-disable-line @typescript-eslint/naming-convention
+  };
+  const headers = {
+    Authorization: `Bearer ${SLACK_TOKEN}`,
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(body),
+    headers: headers,
+    muteHttpExceptions: true,
+  });
+
+  const json = JSON.parse(res.getContentText());
+  return json.ok;
+}
+
+/**
+ * timestampをSpreadSheetに表示する時刻形式に変換
+ * @return 変換された時刻String
  */
 function formatDateYYYYMMddHHmmss(timestamp: number): string {
-  return Utilities.formatDate(
-    new Date(timestamp * 1000),
-    "Asia/Tokyo",
-    "yyyy/MM/dd HH:mm:ss"
-  );
+  return Utilities.formatDate(new Date(timestamp * 1000), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss");
 }
 
-function isWhitelisted(channel: any): boolean {
-  return (
-    channel.purpose.value.includes(":keep:") || channel.name.includes("alert")
-  );
-}
-
-class AllListSheetRow {
+class AllPublicChannelsSheetRow {
   channelName: string; // チャネル名
   channelID: string; // チャネルID
   creatorName: string; // 作成ユーザー
@@ -381,7 +509,7 @@ class AllListSheetRow {
   }
 }
 
-class PreArchiveListSheetRow {
+class ArchiveWarningChannelsSheetRow {
   channelName: string; // チャネル名
   channelID: string; // チャネルID
   creatorName: string; // 作成ユーザー
