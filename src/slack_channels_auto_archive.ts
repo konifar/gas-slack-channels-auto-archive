@@ -330,7 +330,7 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
 
   let message = "";
   if (sortedArchivedRows.length > 0) {
-    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から ${GRACE_DAYS_COUNT}日 以上コメントがなかったためアーカイブされました*\n\n`;
+    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から ${GRACE_DAYS_COUNT}日 以上コメントがなかったためアーカイブされました*\n`;
     for (const row of sortedArchivedRows) {
       const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
       message += `#${row.channelName} by ${creatorName}\n`;
