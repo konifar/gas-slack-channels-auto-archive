@@ -19,9 +19,9 @@ const SHEET_NAME_PUBLIC_CHANNELS = "public_channels";
 const SHEET_NAME_ARCHIVE_WARNING_CHANNELS = "archive_warning_channels";
 
 // アーカイブ警告を行う閾値の日数
-const WARNING_DAYS_COUNT = 90;
+const WARNING_DAYS_COUNT = 95;
 // アーカイブを行うまでの最大警告日数
-const GRACE_DAYS_COUNT = 10;
+const GRACE_DAYS_COUNT = 5;
 
 function execute() {
   const channels = fetchPublicChannels();
@@ -86,6 +86,7 @@ function createAllPublicChannelsSheetRow(channel: any, usersMap: any, latestMess
     creatorName,
     formatDateYYYYMMddHHmmss(channel.created),
     channel.num_members,
+    channel.is_shared,
     lastUserName,
     lastMessageText,
     lastMessageDate,
@@ -93,8 +94,15 @@ function createAllPublicChannelsSheetRow(channel: any, usersMap: any, latestMess
     isWhitelisted()
   );
 
+  /**
+   * アーカイブ対象にしないチャネルのルール
+   * ここでは例として次のルールを設定してあります
+   *   1. チャネルのDesicriptionに :keep: emojiが設定されている
+   *   2. チャネル名に alert が含まれる
+   *   3. 共有チャネルである
+   */
   function isWhitelisted(): boolean {
-    return channel.purpose.value.includes(":keep:") || channel.name.includes("alert");
+    return channel.purpose.value.includes(":keep:") || channel.name.includes("alert") || channel.is_shared == "true"; // eslint-disable-line @typescript-eslint/naming-convention
   }
 }
 
@@ -322,27 +330,27 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
 
   let message = "";
   if (sortedArchivedRows.length > 0) {
-    message += `*:wave: 次のチャネルは警告から${GRACE_DAYS_COUNT}日以上コメントがなかったため、アーカイブされました*\n\n`;
+    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から${GRACE_DAYS_COUNT}日以上コメントがなかったためアーカイブされました*\n\n`;
     for (const row of sortedArchivedRows) {
       const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
-      const lastUserName = row.lastUserName != "" ? `@${row.lastUserName}` : "不明";
-      message += `#${row.channelName} by ${creatorName} | 最終コメント: ${lastUserName}\n`;
+      message += `#${row.channelName} by ${creatorName}\n`;
     }
-  } else {
-    message += `*:white_check_mark: アーカイブされたチャネルはありません*`;
+    if (filteredArchiveWarningRows.length > 0) {
+      message += "\n\n\n";
+    }
   }
 
-  message += "\n\n\n";
-
-  message += `*:hourglass_flowing_sand: 次のチャネルは${WARNING_DAYS_COUNT}日以上コメントがないため、自動アーカイブの候補になっています*\n`;
-  message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
-  message += `${sheetUrl}\n\n`;
-  for (const row of filteredArchiveWarningRows) {
-    const remainingDays = GRACE_DAYS_COUNT - row.daysFromListed;
-    if (remainingDays > 0) {
-      const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
-      const lastUserName = row.lastUserName != "" ? `@${row.lastUserName}` : "不明";
-      message += `\`あと ${remainingDays} 日\` #${row.channelName} by ${creatorName} | 最終コメント: ${lastUserName}\n`;
+  if (filteredArchiveWarningRows.length > 0) {
+    message += `*:hourglass_flowing_sand: ${filteredArchiveWarningRows.length}件 のチャネルが、${WARNING_DAYS_COUNT}日以上コメントがないため自動アーカイブの候補になっています*\n`;
+    message += `アーカイブしてもよい場合は \`/channel_archive\` コマンドでアーカイブしましょう！\n`;
+    message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
+    message += `${sheetUrl}\n\n`;
+    for (const row of filteredArchiveWarningRows) {
+      const remainingDays = GRACE_DAYS_COUNT - row.daysFromListed;
+      if (remainingDays > 0) {
+        const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
+        message += `\`あと ${remainingDays} 日\` #${row.channelName} by ${creatorName}\n`;
+      }
     }
   }
 
@@ -424,6 +432,9 @@ function inviteBotToChannel(channelId: string): boolean {
  * Slackにコメント
  */
 function postSlackBotMessage(channelId: string, text: string): boolean {
+  if (text == "") {
+    return false;
+  }
   // https://api.slack.com/methods/chat.postMessage
   const url = `${SLACK_API_URL}/chat.postMessage`;
   const body = {
@@ -462,6 +473,7 @@ class AllPublicChannelsSheetRow {
   channelID: string; // チャネルID
   creatorName: string; // 作成ユーザー
   channelCreatedDate: string; // 作成日時
+  channelIsShared: boolean; // 共有チャネル
   channelNumMembers: number; // ユーザー数
   lastUserName: string; // 最新コメントユーザー
   lastMessageText: string; // 最新コメント
@@ -475,6 +487,7 @@ class AllPublicChannelsSheetRow {
     creatorName: string,
     channelCreatedDate: string,
     channelNumMembers: number,
+    channelIsShared: boolean,
     lastUserName: string,
     lastMessageText: string,
     lastMessageDate: string,
@@ -486,6 +499,7 @@ class AllPublicChannelsSheetRow {
     this.creatorName = creatorName;
     this.channelCreatedDate = channelCreatedDate;
     this.channelNumMembers = channelNumMembers;
+    this.channelIsShared = channelIsShared;
     this.lastUserName = lastUserName;
     this.lastMessageText = lastMessageText;
     this.lastMessageDate = lastMessageDate;
@@ -500,6 +514,7 @@ class AllPublicChannelsSheetRow {
       this.creatorName,
       this.channelCreatedDate,
       this.channelNumMembers,
+      this.channelIsShared,
       this.lastUserName,
       this.lastMessageText,
       this.lastMessageDate,
