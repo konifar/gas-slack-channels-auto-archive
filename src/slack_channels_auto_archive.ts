@@ -330,7 +330,7 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
 
   let message = "";
   if (sortedArchivedRows.length > 0) {
-    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から${GRACE_DAYS_COUNT}日以上コメントがなかったためアーカイブされました*\n\n`;
+    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から ${GRACE_DAYS_COUNT}日 以上コメントがなかったためアーカイブされました*\n\n`;
     for (const row of sortedArchivedRows) {
       const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
       message += `#${row.channelName} by ${creatorName}\n`;
@@ -341,8 +341,8 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
   }
 
   if (filteredArchiveWarningRows.length > 0) {
-    message += `*:hourglass_flowing_sand: ${filteredArchiveWarningRows.length}件 のチャネルが、${WARNING_DAYS_COUNT}日以上コメントがないため自動アーカイブの候補になっています*\n`;
-    message += `アーカイブしてもよい場合は \`/channel_archive\` コマンドでアーカイブしましょう！\n`;
+    message += `*:hourglass_flowing_sand: ${filteredArchiveWarningRows.length}件 のチャネルが、${WARNING_DAYS_COUNT}日 以上コメントがないため自動アーカイブの候補になっています*\n`;
+    message += `アーカイブしてもよい場合はアーカイブしましょう！\n`;
     message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
     message += `${sheetUrl}\n\n`;
     for (const row of filteredArchiveWarningRows) {
