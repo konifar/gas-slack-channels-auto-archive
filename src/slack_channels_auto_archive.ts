@@ -94,6 +94,13 @@ function createAllPublicChannelsSheetRow(channel: any, usersMap: any, latestMess
     isWhitelisted()
   );
 
+  /**
+   * アーカイブ対象にしないチャネルのルール
+   * ここでは例として次のルールを設定してあります
+   *   1. チャネルのDesicriptionに :keep: emojiが設定されている
+   *   2. チャネル名に alert が含まれる
+   *   3. 共有チャネルである
+   */
   function isWhitelisted(): boolean {
     return channel.purpose.value.includes(":keep:") || channel.name.includes("alert") || channel.is_shared == "true"; // eslint-disable-line @typescript-eslint/naming-convention
   }
@@ -323,7 +330,7 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
 
   let message = "";
   if (sortedArchivedRows.length > 0) {
-    message += `*:wave: 次のチャネル ${sortedArchivedRows.length}件 は警告から${GRACE_DAYS_COUNT}日以上コメントがなかったため、アーカイブされました*\n\n`;
+    message += `*:wave: ${sortedArchivedRows.length} 件のチャネルが、警告から${GRACE_DAYS_COUNT}日以上コメントがなかったためアーカイブされました*\n\n`;
     for (const row of sortedArchivedRows) {
       const creatorName = row.creatorName != "" ? `@${row.creatorName}` : "不明";
       message += `#${row.channelName} by ${creatorName}\n`;
@@ -334,7 +341,7 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
   }
 
   if (filteredArchiveWarningRows.length > 0) {
-    message += `*:hourglass_flowing_sand: 次のチャネル ${filteredArchiveWarningRows.length}件 は${WARNING_DAYS_COUNT}日以上コメントがないため、自動アーカイブの候補になっています*\n`;
+    message += `*:hourglass_flowing_sand: ${filteredArchiveWarningRows.length}件 のチャネルが、${WARNING_DAYS_COUNT}日以上コメントがないため自動アーカイブの候補になっています*\n`;
     message += `アーカイブしてもよい場合は \`/channel_archive\` コマンドでアーカイブしましょう！\n`;
     message += `アーカイブされたくない場合は何かコメントするか、チャネルDescriptionに :keep: を入れてください :pray:\n`;
     message += `${sheetUrl}\n\n`;
