@@ -1,12 +1,12 @@
-name: Publish Release
+name: deploy
 
 on:
   push:
-    tags:
-    - "v*"
+    branches:
+    - main
 
 jobs:
-  release:
+  deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -68,12 +68,12 @@ jobs:
         EOS
         ) > ./.clasp.json
 
-    - name: Get version
-      id: get_version
-      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+    - name: Get commit hash
+      id: vars
+      run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
 
     - name: Upload files
       run: npx @google/clasp push --force
 
     - name: Add version
-      run: npx @google/clasp version ${{ steps.get_version.outputs.VERSION }}
+      run: npx @google/clasp version ${{ steps.vars.outputs.sha_short }}
