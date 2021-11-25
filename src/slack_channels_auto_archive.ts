@@ -102,7 +102,7 @@ function createAllPublicChannelsSheetRow(channel: any, usersMap: any, latestMess
    *   3. 共有チャネルである
    */
   function isWhitelisted(): boolean {
-    return channel.purpose.value.includes(":keep:") || channel.name.includes("alert") || channel.is_shared == "true"; // eslint-disable-line @typescript-eslint/naming-convention
+    return channel.purpose.value.includes(":keep:") || channel.name.includes("alert") || channel.is_shared; // eslint-disable-line @typescript-eslint/naming-convention
   }
 }
 
@@ -156,7 +156,12 @@ function fetchAllUserIdNameMap(): Map<string, string> {
 function writeAllPublicChannelsToSpreadSheet(rowData: Array<AllPublicChannelsSheetRow>) {
   const sheet = getSheet(SHEET_NAME_PUBLIC_CHANNELS);
 
-  sheet.getRange("A2:I3000").clearContent();
+  sheet.getRange("A2:AA3000").clearContent();
+
+  if (rowData.length == 0) {
+    Logger.log("Publicチャネルがありません");
+    return;
+  }
 
   const rowArrays = rowData.map(function (row) {
     return row.toArray();
@@ -168,7 +173,7 @@ function writeAllPublicChannelsToSpreadSheet(rowData: Array<AllPublicChannelsShe
   range.setValues(rowArrays);
   // Order by elapsed date desc
   range.sort([
-    { column: 9, ascending: false },
+    { column: 10, ascending: false },
     { column: 1, ascending: true },
   ]);
   sheet.setRowHeights(2, rows - 1, 21);
@@ -251,7 +256,12 @@ function getSheet(sheetName: string): Sheet {
 function writeArchiveWarningChannelsToSpreadSheet(rowData: Array<ArchiveWarningChannelsSheetRow>) {
   const sheet = getSheet(SHEET_NAME_ARCHIVE_WARNING_CHANNELS);
 
-  sheet.getRange("A2:I3000").clearContent();
+  sheet.getRange("A2:AA3000").clearContent();
+
+  if (rowData.length == 0) {
+    Logger.log("アーカイブ警告チャネルがありません");
+    return;
+  }
 
   const rowArrays = rowData.map(function (row) {
     return row.toArray();
