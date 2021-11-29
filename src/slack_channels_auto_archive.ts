@@ -176,7 +176,7 @@ function writeAllPublicChannelsToSpreadSheet(rowData: Array<AllPublicChannelsShe
     { column: 10, ascending: false },
     { column: 1, ascending: true },
   ]);
-  sheet.setRowHeights(2, rows - 1, 21);
+  sheet.setRowHeights(2, rows, 21);
 }
 
 /**
@@ -275,7 +275,7 @@ function writeArchiveWarningChannelsToSpreadSheet(rowData: Array<ArchiveWarningC
     { column: 7, ascending: false },
     { column: 1, ascending: true },
   ]);
-  sheet.setRowHeights(2, rows - 1, 21);
+  sheet.setRowHeights(2, rows, 21);
 }
 
 /**
