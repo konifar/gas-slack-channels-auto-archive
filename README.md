@@ -24,7 +24,7 @@ yarn install
 
 ## GitHub Secrets
 
-デプロイに必要な `~/.clasprc.json` の除法をGitHubリポジトリのSecretsに登録します。
+デプロイに必要な `~/.clasprc.json` の情報をGitHubリポジトリのSecretsに登録します。
 
 - `CLASPRC_ACCESS_TOKEN`
 - `CLASPRC_CLIENT_ID`
