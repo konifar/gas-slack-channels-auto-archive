@@ -115,11 +115,18 @@ function fetchPublicChannels(): Array<any> {
 
   do {
     // https://api.slack.com/methods/conversations.list
-    let url = `${SLACK_API_URL}/conversations.list?token=${SLACK_TOKEN}&exclude_archived=true&types=public_channel&limit=999`;
+    const headers = {
+      Authorization: `Bearer ${SLACK_TOKEN}`,
+    };
+    let url = `${SLACK_API_URL}/conversations.list?exclude_archived=true&types=public_channel&limit=999`;
     if (nextCursor != "") {
       url += `&cursor=${nextCursor}`;
     }
-    const json = JSON.parse(UrlFetchApp.fetch(url).getContentText());
+    const res = UrlFetchApp.fetch(url, {
+      headers: headers,
+      muteHttpExceptions: true,
+    });
+    const json = JSON.parse(res.getContentText());
     channels = channels.concat(json.channels);
     nextCursor = json.response_metadata.next_cursor;
   } while (nextCursor != "");
@@ -136,11 +143,18 @@ function fetchAllUserIdNameMap(): Map<string, string> {
 
   do {
     // https://api.slack.com/methods/users.list
-    let url = `${SLACK_API_URL}/users.list?token=${SLACK_TOKEN}&limit=999`;
+    const headers = {
+      Authorization: `Bearer ${SLACK_TOKEN}`,
+    };
+    let url = `${SLACK_API_URL}/users.list?limit=999`;
     if (nextCursor != "") {
       url += `&cursor=${nextCursor}`;
     }
-    const json = JSON.parse(UrlFetchApp.fetch(url).getContentText());
+    const res = UrlFetchApp.fetch(url, {
+      headers: headers,
+      muteHttpExceptions: true,
+    });
+    const json = JSON.parse(res.getContentText());
     for (const member of json.members) {
       usersMap.set(member.id, member.name);
     }
@@ -373,8 +387,15 @@ function createSlackMessage(archivedRows: Array<ArchiveWarningChannelsSheetRow>,
  */
 function fetchLatestChannelMessage(channelId: string): any {
   // https://api.slack.com/methods/conversations.history
-  const url = `${SLACK_API_URL}/conversations.history?token=${SLACK_TOKEN}&channel=${channelId}&limit=200`;
-  const json = JSON.parse(UrlFetchApp.fetch(url).getContentText());
+  const headers = {
+    Authorization: `Bearer ${SLACK_TOKEN}`,
+  };
+  const url = `${SLACK_API_URL}/conversations.history?channel=${channelId}&limit=200`;
+  const res = UrlFetchApp.fetch(url, {
+    headers: headers,
+    muteHttpExceptions: true,
+  });
+  const json = JSON.parse(res.getContentText());
 
   for (const message of json.messages) {
     // https://api.slack.com/events/message#subtypes
